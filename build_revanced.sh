@@ -1,5 +1,22 @@
 #!/bin/bash
 
+# Latest compatible version of apks
+# YouTube Music 5.03.50
+# YouTube 17.24.34
+# Vanced microG 0.2.24.220220
+
+YTM_VERSION="5.03.50"
+YT_VERSION="17.24.34"
+VMG_VERSION="0.2.24.220220"
+
+# Artifacts associative array aka dictionary
+declare -A artifacts
+
+artifacts["revanced-cli.jar"]="revanced/revanced-cli revanced-cli .jar"
+artifacts["revanced-integrations.apk"]="revanced/revanced-integrations app-release-unsigned .apk"
+artifacts["revanced-patches.jar"]="revanced/revanced-patches revanced-patches .jar"
+artifacts["apkeep"]="EFForg/apkeep apkeep-x86_64-unknown-linux-gnu"
+
 get_artifact_download_url () {
     # Usage: get_download_url <repo_name> <artifact_name> <file_type>
     local api_url="https://api.github.com/repos/$1/releases/latest"
@@ -7,37 +24,18 @@ get_artifact_download_url () {
     echo ${result:1:-1}
 }
 
-if [ ! -f "revanced-cli.jar" ]; then
-    echo "Downloading revanced-cli.jar"
-    curl -L -o revanced-cli.jar $(get_artifact_download_url "revanced/revanced-cli" "revanced-cli" ".jar")
-fi
+# Fetch all the dependencies
+for artifact in "${!artifacts[@]}"; do
+    if [ ! -f $artifact ]; then
+        echo "Downloading $artifact"
+        curl -L -o $artifact $(get_artifact_download_url ${artifacts[$artifact]})
+    fi
+done
 
-if [ ! -f "revanced-integrations.apk" ]; then
-    echo "Downloading revanced-integrations.apk"
-    curl -L -o revanced-integrations.apk $(get_artifact_download_url "revanced/revanced-integrations" "app-release-unsigned" ".apk")
-fi
+# Fetch microG
+chmod +x apkeep
 
-if [ ! -f "revanced-patches.jar" ]; then
-    echo "Downloading revanced-patches.jar"
-    curl -L -o revanced-patches.jar $(get_artifact_download_url "revanced/revanced-patches" "revanced-patches" ".jar")
-fi
-
-# Latest compatible version of apks
-# YouTube Music 5.03.50
-# YouTube 17.22.36
-# Vanced microG 0.2.24.220220
-
-YTM_VERSION="5.03.50"
-YT_VERSION="17.22.36"
-VMG_VERSION="0.2.24.220220"
-
-if [ ! -f "apkeep" ]; then
-    echo "Downloading apkeep"
-    curl -L -o apkeep $(get_artifact_download_url "EFForg/apkeep" "apkeep-x86_64-unknown-linux-gnu")
-    chmod +x apkeep
-fi
-
-# ./apkeep -a com.google.android.youtube@17.22.36 com.google.android.youtube
+# ./apkeep -a com.google.android.youtube@17.24.34 com.google.android.youtube
 # ./apkeep -a com.google.android.apps.youtube.music@5.03.50 com.google.android.apps.youtube.music
 
 if [ ! -f "vanced-microG.apk" ]; then
@@ -62,18 +60,17 @@ echo "Building YouTube APK"
 echo "************************************"
 
 mkdir -p build
-available_patches=$(java -jar revanced-cli.jar -b revanced-patches.jar -a a -o b -l | sed -Er  's#\[available\] (.+)#-i \1 #')
-# Uncomment and modify the following line to set different patches
-# available_patches="-i codecs-unlock -i exclusive-audio-playback -i tasteBuilder-remover -i upgrade-button-remover -i background-play -i general-ads -i video-ads -i seekbar-tapping -i amoled -i premium-heading -i custom-branding -i disable-create-button -i minimized-playback -i old-quality-layout -i shorts-button -i microg-support"
+# Obtained from: revanced-patches-1.9.1
+# available_patches="-e amoled -e minimized-playback -e disable-create-button -e premium-heading -e custom-branding -e disable-shorts-button -e disable-fullscreen-panels -e old-quality-layout -e hide-cast-button -e microg-support -e general-ads -e video-ads -e seekbar-tapping -e upgrade-button-remover -e tasteBuilder-remover -e background-play -e exclusive-audio-playback -e codecs-unlock"
 
 if [ -f "com.google.android.youtube.apk" ]
 then
     echo "Building Root APK"
-    java -jar revanced-cli.jar -m revanced-integrations.apk -b revanced-patches.jar --install \
+    java -jar revanced-cli.jar -m revanced-integrations.apk -b revanced-patches.jar --mount \
+                               -e microg-support \
                                -a com.google.android.youtube.apk -o build/revanced-root.apk
     echo "Building Non-root APK"
-    java -jar revanced-cli.jar -m revanced-integrations.apk -b revanced-patches.jar --install \
-                               $available_patches \
+    java -jar revanced-cli.jar -m revanced-integrations.apk -b revanced-patches.jar  \
                                -a com.google.android.youtube.apk -o build/revanced-nonroot.apk
 else
     echo "Cannot find YouTube APK, skipping build"
@@ -85,11 +82,11 @@ echo "************************************"
 if [ -f "com.google.android.apps.youtube.music.apk" ]
 then
     echo "Building Root APK"
-    java -jar revanced-cli.jar -b revanced-patches.jar --install \
+    java -jar revanced-cli.jar -b revanced-patches.jar --mount \
+                               -e microg-support \
                                -a com.google.android.apps.youtube.music.apk -o build/revanced-music-root.apk
     echo "Building Non-root APK"
-    java -jar revanced-cli.jar -b revanced-patches.jar --install \
-                               $available_patches \
+    java -jar revanced-cli.jar -b revanced-patches.jar \
                                -a com.google.android.apps.youtube.music.apk -o build/revanced-music-nonroot.apk
 else
     echo "Cannot find YouTube Music APK, skipping build"
